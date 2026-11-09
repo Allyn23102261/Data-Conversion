@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV to JSON</title>
+</head>
+<body>
+  <h1>Allyn James C. Segundino</h1>
+  <div>IT 3206N MW 6:00 - 8:30 PM</div>
+  <hr>
+
+  <h3>1. Upload CSV</h3>
+  <input type="file" id="csvFile" accept=".csv">
+  <button id="convertBtn">Convert</button>
+
+  <h3>2. JSON Display</h3>
+  <pre id="jsonOutput">Upload a CSV file and click Convert.</pre>
+
+  <h3>3. Download</h3>
+  <button id="downloadBtn">Download JSON</button>
+
+<script>
+  const programMap = {
+    BSIT: "Bachelor of Science in Information Technology",
+    BSCS: "Bachelor of Science in Computer Science"
+  };
+
+  let jsonResult = null;
+
+  function capitalize(str) {
+    str = str.trim();
+    if (!str) return "";
+    return str.toLowerCase().replace(/(^|\s|-)([a-z])/g, function (m, p, c) {
+      return p + c.toUpperCase();
+    });
+  }
+
+  function parseCSVLine(line) {
+    const result = [];
+    let cur = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        result.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur);
+    return result;
+  }
+
+  function csvToJson(text) {
+    const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim() !== "");
+    if (lines.length < 2) throw new Error("CSV has no data rows.");
+    const headers = parseCSVLine(lines[0]).map(h => h.trim());
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const vals = parseCSVLine(lines[i]);
+      const r = {};
+      headers.forEach((h, idx) => { r[h] = (vals[idx] || "").trim(); });
+
+      const code = r.course.toUpperCase();
+      rows.push({
+        studentId: parseInt(r.student_id, 10),
+        firstName: capitalize(r.first_name),
+        lastName: capitalize(r.last_name),
+        program: programMap[code] || r.course,
+        yearLevel: parseInt(r.year_level, 10),
+        emailAddress: r.email.toLowerCase(),
+        outstandingBalance: parseFloat(parseFloat(r.tuition_balance).toFixed(2))
+      });
+    }
+    return rows;
+  }
+
+  function stringifyWithDecimals(data) {
+    let json = JSON.stringify(data, null, 2);
+    return json.replace(/("outstandingBalance": )(-?\d+(\.\d+)?)/g, function (m, key, num) {
+      return key + parseFloat(num).toFixed(2);
+    });
+  }
+
+  document.getElementById("convertBtn").addEventListener("click", function () {
+    const file = document.getElementById("csvFile").files[0];
+    const out = document.getElementById("jsonOutput");
+    if (!file) {
+      out.textContent = "Please choose a CSV file first.";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        jsonResult = csvToJson(e.target.result);
+        out.textContent = stringifyWithDecimals(jsonResult);
+      } catch (err) {
+        jsonResult = null;
+        out.textContent = "Error: " + err.message;
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById("downloadBtn").addEventListener("click", function () {
+    if (!jsonResult) {
+      alert("Convert a CSV file first.");
+      return;
+    }
+    const blob = new Blob([stringifyWithDecimals(jsonResult)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "students.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
